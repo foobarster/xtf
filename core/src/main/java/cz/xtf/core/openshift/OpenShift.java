@@ -83,7 +83,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class OpenShift extends DefaultOpenShiftClient {
 	private static ServiceLoader<CustomResourceDefinitionContextProvider> crdContextProviderLoader;
-	private static String routeSuffix;
+	private static volatile String routeSuffix;
 
 	public static final String KEEP_LABEL = "xtf.cz/keep";
 
@@ -334,7 +334,7 @@ public class OpenShift extends DefaultOpenShiftClient {
 	public String getPodLog(Pod pod) {
 		return getPodLog(pod, getAnyContainer(pod));
 	}
-	
+
 	public String getPodLog(Pod pod, String containerName) {
 		return getPodLog(pod, getContainer(pod, containerName));
 	}
@@ -349,7 +349,7 @@ public class OpenShift extends DefaultOpenShiftClient {
 
 	/**
 	 * Return logs of all containers from the pod
-	 * 
+	 *
 	 * @param pod Pod to retrieve from
 	 * @return Map of container name / logs
 	 */
@@ -360,7 +360,7 @@ public class OpenShift extends DefaultOpenShiftClient {
 	public Reader getPodLogReader(Pod pod) {
 		return getPodLogReader(pod, getAnyContainer(pod));
 	}
-	
+
 	public Reader getPodLogReader(Pod pod, String containerName) {
 		return getPodLogReader(pod, getContainer(pod, containerName));
 	}
@@ -375,7 +375,7 @@ public class OpenShift extends DefaultOpenShiftClient {
 
 	/**
 	 * Return readers on logs of all containers from the pod
-	 * 
+	 *
 	 * @param pod Pod to retrieve from
 	 * @return Map of container name / reader
 	 */
@@ -390,7 +390,7 @@ public class OpenShift extends DefaultOpenShiftClient {
 	public Observable<String> observePodLog(Pod pod) {
 		return observePodLog(pod, getAnyContainer(pod));
 	}
-	
+
 	public Observable<String> observePodLog(Pod pod, String containerName) {
 		return observePodLog(pod, getContainer(pod, containerName));
 	}
@@ -404,10 +404,10 @@ public class OpenShift extends DefaultOpenShiftClient {
 		}
 		return StringObservable.byLine(StringObservable.from(new InputStreamReader(watcher.getOutput())));
 	}
-	
+
 	/**
 	 * Return obervables on logs of all containers from the pod
-	 * 
+	 *
 	 * @param pod Pod to retrieve from
 	 * @return Map of container name / logs obervable
 	 */
@@ -479,10 +479,10 @@ public class OpenShift extends DefaultOpenShiftClient {
 	public boolean deletePods(Map<String, String> labels) {
 		return pods().withLabels(labels).delete();
 	}
-	
+
 	/**
 	 * Retrieve pod containers
-	 * 
+	 *
 	 * @param pod pod to retrieve in
 	 * @return List of containers of empty list if none ...
 	 */
@@ -492,7 +492,7 @@ public class OpenShift extends DefaultOpenShiftClient {
 
 	/**
 	 * Retrieve any container from the given pod
-	 * 
+	 *
 	 * @param pod Pod to retrieve from
 	 * @return One random container from the pod
 	 */
@@ -500,7 +500,7 @@ public class OpenShift extends DefaultOpenShiftClient {
 		List<Container> containers = getAllContainers(pod);
 		return containers.get(new Random().nextInt(containers.size()));
 	}
-	
+
 	public Container getContainer(Pod pod, String containerName) {
 		return getAllContainers(pod).stream()
 			.filter(c -> c.getName().equals(containerName))
@@ -599,10 +599,14 @@ public class OpenShift extends DefaultOpenShiftClient {
 	 */
 	public String generateHostname(String routeName) {
 		if (routeSuffix == null) {
-			if (StringUtils.isNotBlank(cz.xtf.core.config.OpenShiftConfig.routeDomain())) {
-				routeSuffix = cz.xtf.core.config.OpenShiftConfig.routeDomain();
-			} else {
-				routeSuffix = retrieveRouteSuffix();
+			synchronized (OpenShift.class) {
+				if (routeSuffix == null) {
+					if (StringUtils.isNotBlank(cz.xtf.core.config.OpenShiftConfig.routeDomain())) {
+						routeSuffix = cz.xtf.core.config.OpenShiftConfig.routeDomain();
+					} else {
+						routeSuffix = retrieveRouteSuffix();
+					}
+				}
 			}
 		}
 		return routeName + "-" + getNamespace() + "." + routeSuffix;
